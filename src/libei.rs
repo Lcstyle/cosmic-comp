@@ -9,9 +9,7 @@ use smithay::reexports::calloop;
 use crate::state::State;
 
 pub fn listen_eis(handle: &calloop::LoopHandle<'static, State>) {
-    let listener = eis::Listener::bind_auto()
-        .unwrap()
-        .expect("No `XDG_RUNTIME_DIR` defined");
+    let listener = eis::Listener::bind_auto().unwrap();
 
     unsafe { std::env::set_var("LIBEI_SOCKET", listener.path()) };
 
