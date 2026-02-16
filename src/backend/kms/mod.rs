@@ -23,6 +23,7 @@ use smithay::{
         session::{Event as SessionEvent, Session, libseat::LibSeatSession},
         udev::{UdevBackend, UdevEvent, primary_gpu},
     },
+    backend::renderer::utils::with_renderer_surface_state,
     output::Output,
     reexports::{
         calloop::{Dispatcher, EventLoop, LoopHandle},
@@ -419,6 +420,11 @@ impl State {
                 let shell = state.common.shell.read();
                 if let Some(session_lock) = &shell.session_lock {
                     for (output, lock_surface) in &session_lock.surfaces {
+                        let _ = with_renderer_surface_state(
+                            lock_surface.wl_surface(),
+                            |rs| { rs.invalidate_textures(); },
+                        );
+
                         let size = output.geometry().size;
                         let (w, h) = (size.w as u32, size.h as u32);
                         lock_surface.with_pending_state(|states| {
