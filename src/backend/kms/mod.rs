@@ -417,6 +417,28 @@ impl State {
 
             {
                 let shell = state.common.shell.read();
+                if let Some(session_lock) = &shell.session_lock {
+                    for (output, lock_surface) in &session_lock.surfaces {
+                        let size = output.geometry().size;
+                        let (w, h) = (size.w as u32, size.h as u32);
+                        lock_surface.with_pending_state(|states| {
+                            states.size = Some(Size::from((w, h.saturating_add(1))));
+                        });
+                        lock_surface.send_configure();
+                        lock_surface.with_pending_state(|states| {
+                            states.size = Some(Size::from((w, h)));
+                        });
+                        lock_surface.send_configure();
+                        info!(
+                            "Resume: re-configured lock surface for {} ({}x{})",
+                            output.name(), w, h,
+                        );
+                    }
+                }
+            }
+
+            {
+                let shell = state.common.shell.read();
                 let outputs: Vec<_> = shell.outputs().cloned().collect();
                 std::mem::drop(shell);
                 for output in &outputs {
