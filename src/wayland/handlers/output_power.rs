@@ -22,6 +22,17 @@ pub fn set_all_surfaces_dpms_on(state: &mut State) {
 
     if changed {
         OutputPowerState::refresh(state);
+
+        let outputs: Vec<_> = state
+            .common
+            .shell
+            .read()
+            .outputs()
+            .cloned()
+            .collect();
+        for output in &outputs {
+            state.common.send_frames(output, None);
+        }
     }
 }
 
