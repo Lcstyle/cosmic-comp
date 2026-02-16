@@ -414,6 +414,15 @@ impl State {
                 }
             }
             state.common.refresh();
+
+            {
+                let shell = state.common.shell.read();
+                let outputs: Vec<_> = shell.outputs().cloned().collect();
+                std::mem::drop(shell);
+                for output in &outputs {
+                    state.common.send_frames(output, None);
+                }
+            }
         });
 
         loop_signal.wakeup();
