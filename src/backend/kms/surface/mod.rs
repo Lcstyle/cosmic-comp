@@ -717,6 +717,25 @@ impl SurfaceThreadState {
                 .remove(FrameFlags::ALLOW_OVERLAY_PLANE_SCANOUT);
         }
         self.compositor = Some(compositor);
+
+        self.compositor.as_mut().unwrap().reset_buffers();
+        self.state = QueueState::Idle;
+        self.queue_redraw(true);
+
+        for delay_ms in [500, 1000, 2000, 3000, 5000, 7000, 10000] {
+            if let Err(err) = self.loop_handle.insert_source(
+                Timer::from_duration(Duration::from_millis(delay_ms)),
+                move |_, _, state: &mut SurfaceThreadState| {
+                    if state.compositor.is_some() {
+                        state.compositor.as_mut().unwrap().reset_buffers();
+                        state.queue_redraw(true);
+                    }
+                    TimeoutAction::Drop
+                },
+            ) {
+                warn!("Failed to schedule post-resume redraw timer: {err}");
+            }
+        }
     }
 
     fn node_added(
