@@ -73,6 +73,7 @@ pub struct KmsState {
     libinput: Libinput,
 
     pub syncobj_state: Option<DrmSyncobjState>,
+    pub udev_dispatcher: Dispatcher<'static, UdevBackend, State>,
 }
 
 pub struct KmsGuard<'a> {
@@ -130,6 +131,7 @@ pub fn init_backend(
         libinput: libinput_context,
 
         syncobj_state: None,
+        udev_dispatcher: udev_dispatcher.clone(),
     });
 
     // manually add already present gpus
@@ -347,7 +349,7 @@ fn init_udev(
 }
 
 impl State {
-    fn resume_session(
+    pub(crate) fn resume_session(
         &mut self,
         dispatcher: Dispatcher<'static, UdevBackend, Self>,
         loop_handle: LoopHandle<'static, State>,
@@ -413,10 +415,11 @@ impl State {
             }
             state.common.refresh();
         });
+
         loop_signal.wakeup();
     }
 
-    fn pause_session(&mut self) {
+    pub(crate) fn pause_session(&mut self) {
         let backend = self.backend.kms();
         backend.libinput.suspend();
         for device in backend.drm_devices.values_mut() {
