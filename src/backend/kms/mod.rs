@@ -489,6 +489,35 @@ impl State {
 
                 {
                     let shell = state.common.shell.read();
+                    if let Some(session_lock) = &shell.session_lock {
+                        for (output, lock_surface) in &session_lock.surfaces {
+                            let has_buffer = with_renderer_surface_state(
+                                lock_surface.wl_surface(),
+                                |rs| rs.buffer().is_some(),
+                            ).unwrap_or(false);
+                            if !has_buffer {
+                                warn!(
+                                    "Resume: lock surface for {} still has no buffer after {}s, re-sending configure",
+                                    output.name(),
+                                    resume_start.elapsed().as_secs(),
+                                );
+                                let size = output.geometry().size;
+                                let (w, h) = (size.w as u32, size.h as u32);
+                                lock_surface.with_pending_state(|states| {
+                                    states.size = Some(Size::from((w, h.saturating_add(1))));
+                                });
+                                lock_surface.send_configure();
+                                lock_surface.with_pending_state(|states| {
+                                    states.size = Some(Size::from((w, h)));
+                                });
+                                lock_surface.send_configure();
+                            }
+                        }
+                    }
+                }
+
+                {
+                    let shell = state.common.shell.read();
                     let outputs: Vec<_> = shell.outputs().cloned().collect();
                     std::mem::drop(shell);
                     for output in &outputs {
