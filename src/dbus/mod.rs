@@ -16,6 +16,8 @@ pub mod a11y_keyboard_monitor;
 pub mod logind;
 mod name_owners;
 mod power;
+#[cfg(feature = "systemd")]
+mod sleep;
 
 pub fn init(
     evlh: &LoopHandle<'static, State>,
@@ -77,6 +79,54 @@ pub fn init(
         }
         Err(err) => {
             tracing::info!(?err, "Failed to connect to com.system76.PowerDaemon");
+        }
+    };
+
+    #[cfg(feature = "systemd")]
+    match block_on(sleep::init()) {
+        Ok(logind_manager) => {
+            let (tx, rx) = calloop::channel::channel::<bool>();
+
+            let token = evlh
+                .insert_source(rx, |event, _, state| match event {
+                    calloop::channel::Event::Msg(preparing) => {
+                        if preparing {
+                            state.pause_session();
+                            state.common.inhibit_sleep_fd.take();
+                        } else {
+                            state.common.event_loop_handle.insert_idle(|state| {
+                                match logind::inhibit_sleep() {
+                                    Ok(fd) => {
+                                        state.common.inhibit_sleep_fd = Some(fd);
+                                    }
+                                    Err(err) => {
+                                        warn!(?err, "Failed to re-acquire sleep inhibitor lock");
+                                    }
+                                }
+                            });
+                        }
+                    }
+                    calloop::channel::Event::Closed => (),
+                })
+                .map_err(|InsertError { error, .. }| error)
+                .with_context(|| "Failed to add sleep channel to event_loop")?;
+
+            executor.spawn_ok(async move {
+                if let Ok(mut stream) = logind_manager.receive_prepare_for_sleep().await {
+                    while let Some(signal) = stream.next().await {
+                        if let Ok(args) = signal.args() {
+                            if tx.send(args.start).is_err() {
+                                break;
+                            }
+                        }
+                    }
+                }
+            });
+
+            tokens.push(token);
+        }
+        Err(err) => {
+            tracing::info!(?err, "Failed to connect to logind for sleep signals");
         }
     };
 
