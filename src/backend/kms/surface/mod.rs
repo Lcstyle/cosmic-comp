@@ -717,6 +717,9 @@ impl SurfaceThreadState {
                 .remove(FrameFlags::ALLOW_OVERLAY_PLANE_SCANOUT);
         }
         self.compositor = Some(compositor);
+        self.state = QueueState::Idle;
+        self.compositor.as_mut().unwrap().reset_buffers();
+        self.queue_redraw(true);
     }
 
     fn node_added(
