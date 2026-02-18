@@ -35,6 +35,7 @@ use smithay::{
     },
     utils::{Clock, DevPath, Monotonic, Size},
     wayland::{
+        compositor::{self, SurfaceAttributes},
         dmabuf::DmabufGlobal,
         drm_syncobj::{DrmSyncobjState, supports_syncobj_eventfd},
         relative_pointer::RelativePointerManagerState,
@@ -418,9 +419,49 @@ impl State {
             {
                 let shell = state.common.shell.read();
                 let outputs: Vec<_> = shell.outputs().cloned().collect();
+                let lock_surfaces: Vec<_> = if let Some(session_lock) = shell.session_lock.as_ref()
+                {
+                    outputs
+                        .iter()
+                        .filter_map(|output| {
+                            session_lock
+                                .surfaces
+                                .get(output)
+                                .map(|ls| (output.clone(), ls.clone()))
+                        })
+                        .collect()
+                } else {
+                    Vec::new()
+                };
                 std::mem::drop(shell);
+
                 for output in &outputs {
                     state.common.send_frames(output, None);
+                }
+
+                let now = state.common.clock.now();
+                for (output, lock_surface) in &lock_surfaces {
+                    let stuck_callbacks =
+                        compositor::with_states(lock_surface.wl_surface(), |states| {
+                            let mut attrs = states.cached_state.get::<SurfaceAttributes>();
+                            if attrs.current().frame_callbacks.is_empty()
+                                && !attrs.pending().frame_callbacks.is_empty()
+                            {
+                                Some(std::mem::take(&mut attrs.pending().frame_callbacks))
+                            } else {
+                                None
+                            }
+                        });
+                    if let Some(callbacks) = stuck_callbacks {
+                        warn!(
+                            output = output.name(),
+                            count = callbacks.len(),
+                            "Resume: draining stuck pending frame callbacks for lock surface",
+                        );
+                        for callback in callbacks {
+                            callback.done(now.as_millis() as u32);
+                        }
+                    }
                 }
             }
         });
