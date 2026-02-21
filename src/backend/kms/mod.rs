@@ -48,6 +48,7 @@ use std::{
     collections::{HashMap, HashSet},
     path::Path,
     sync::{Arc, RwLock, atomic::AtomicBool},
+    time::Duration,
 };
 
 mod device;
@@ -477,6 +478,10 @@ impl State {
                 lease_state.suspend();
             }
             for surface in device.inner.surfaces.values_mut() {
+                if !surface.get_dpms() {
+                    surface.set_dpms(true);
+                    std::thread::sleep(Duration::from_millis(50));
+                }
                 surface.suspend();
             }
             device.drm.pause();
