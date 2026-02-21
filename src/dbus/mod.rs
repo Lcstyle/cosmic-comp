@@ -94,16 +94,14 @@ pub fn init(
                             state.pause_session();
                             state.common.inhibit_sleep_fd.take();
                         } else {
-                            state.common.event_loop_handle.insert_idle(|state| {
-                                match logind::inhibit_sleep() {
-                                    Ok(fd) => {
-                                        state.common.inhibit_sleep_fd = Some(fd);
-                                    }
-                                    Err(err) => {
-                                        warn!(?err, "Failed to re-acquire sleep inhibitor lock");
-                                    }
+                            match logind::inhibit_sleep() {
+                                Ok(fd) => {
+                                    state.common.inhibit_sleep_fd = Some(fd);
                                 }
-                            });
+                                Err(err) => {
+                                    warn!(?err, "Failed to re-acquire sleep inhibitor lock");
+                                }
+                            }
                         }
                     }
                     calloop::channel::Event::Closed => (),
