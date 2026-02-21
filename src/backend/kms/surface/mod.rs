@@ -426,8 +426,26 @@ impl Surface {
 
     pub fn suspend(&mut self) {
         let (tx, rx) = std::sync::mpsc::sync_channel(1);
-        let _ = self.thread_command.send(ThreadCommand::Suspend(tx));
-        let _ = rx.recv();
+        if self
+            .thread_command
+            .send(ThreadCommand::Suspend(tx))
+            .is_err()
+        {
+            warn!(output = %self.output.name(), "Surface thread channel closed during suspend");
+            self.active.store(false, Ordering::SeqCst);
+            return;
+        }
+        match rx.recv_timeout(Duration::from_secs(5)) {
+            Ok(()) => {}
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                warn!(output = %self.output.name(), "Surface thread did not respond to suspend within 5s");
+                self.active.store(false, Ordering::SeqCst);
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                warn!(output = %self.output.name(), "Surface thread disconnected during suspend");
+                self.active.store(false, Ordering::SeqCst);
+            }
+        }
     }
 
     pub fn resume(
